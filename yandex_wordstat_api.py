@@ -7,7 +7,6 @@ from typing import List
 
 class WordStatApiClient:
     """Class represents a client to work with Yandex WordStat API."""
-
     def __init__(self, token):
         self.token = token
         self.url = 'https://api.direct.yandex.ru/v/json/'
@@ -35,7 +34,10 @@ class WordStatApiClient:
         if not ready:
             return None
         report = self.get_report(report_id)
-
+        if not report:
+            return None
+        self.add_phrase_statistics_to_db(report)
+        self.delete_report(report_id)
 
     def request_report(self, phrase: str, geo_id: List[int, ] = None):
         """Requests report from Yandex WordStat.
@@ -84,7 +86,7 @@ class WordStatApiClient:
         return False
 
     def get_report(self, report_id):
-
+        """Get report from Yandex WordStat."""
         data = {
             "method": "GetWordstatReport",
             "param": report_id,
@@ -101,3 +103,23 @@ class WordStatApiClient:
             print("Error in get_report: " + str(e))
         return report
 
+    def add_phrase_statistics_to_db(self, report):
+        """Writes phrase statistics from report to db."""
+        pass
+
+    def delete_report(self, report_id):
+        """Delete report from Yandex WordStat API. It can have max 5 reports."""
+        data = {
+            "method": "DeleteWordstatReport",
+            "param": report_id,
+            'token': self.token,
+            'locale': 'ru',
+        }
+        jdata = json.dumps(data, ensure_ascii=False).encode('utf8')
+        try:
+            with urllib.request.urlopen(self.url, jdata) as response:
+                res = json.loads(response.read().decode('utf8'))
+            if res["data"] == 1:
+                print(f"Report {report_id} deleted successfully.")
+        except URLError as e:
+            print("Error in get_report: " + str(e))
