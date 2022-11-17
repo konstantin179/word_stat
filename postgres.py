@@ -60,6 +60,7 @@ class DB:
             cursor.close()
         except (Exception, psycopg2.Error) as error:
             print("PostgreSQL error:", error)
+            return "error"
         return max_week_number
 
     def close(self):

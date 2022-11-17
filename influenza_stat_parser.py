@@ -19,13 +19,18 @@ class InfluenzaStatParser:
         if conn_string:
             with DB(conn_string) as db:
                 last_week_number = db.get_max_week_number(self.year)
+        if last_week_number == "error":  # Error in database.
+            return None
         week_numbers = self.get_week_numbers()
-        if not last_week_number:
-            self.get_statistics_data_multithread(week_numbers)
+        data = []
+        if not last_week_number:  # DB table has no data for this year.
+            data = self.get_statistics_data_multithread(week_numbers)
         else:
-            week_numbers = [week_num for week_num in week_numbers if week_num > last_week_number]
-            if week_numbers:
-                self.get_statistics_data_multithread(week_numbers)
+            week_numbers = [week_num for week_num in week_numbers if int(week_num) > last_week_number]
+            if week_numbers:  # Take data for new week numbers that are not in the database.
+                data = self.get_statistics_data_multithread(week_numbers)
+        if data:
+            self.write_data_into_db(data)
 
     def get_statistics_data(self, week_numbers):
         """Returns list of tuples with year, week numbers and cases numbers."""
@@ -46,7 +51,7 @@ class InfluenzaStatParser:
 
     @staticmethod
     def write_data_into_db(data):
-        """Writes statistics data to db."""
+        """Writes statistics data to influenza_stat table in db."""
         load_dotenv()
         conn_string = os.getenv("DB_CONN_STR")
         if conn_string:
@@ -92,5 +97,3 @@ class InfluenzaStatParser:
         cases_number = self.get_cases_per_week(week_number)
         week_number = int(week_number)
         return week_number, cases_number
-
-
