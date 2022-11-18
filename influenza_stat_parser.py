@@ -1,6 +1,11 @@
 import requests
 import re
 import os
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.figure import Figure
+from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
+from io import BytesIO
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor
 from postgres import DB
@@ -97,3 +102,47 @@ class InfluenzaStatParser:
         cases_number = self.get_cases_per_week(week_number)
         week_number = int(week_number)
         return week_number, cases_number
+
+    def get_plot(self, start_week: int = 1, end_week: int = 52):
+        """Returns bytes buffer with graph of influenza statistics by week,
+        starting from week number start_week to week number end_week."""
+        weeks, cases = [], []
+        load_dotenv()
+        conn_string = os.getenv("DB_CONN_STR")
+        if conn_string:
+            with DB(conn_string) as db:
+                weeks, cases = db.get_plot_data(self.year, start_week, end_week)
+        if not (weeks and cases):
+            return None
+        weeks = np.array(weeks)
+        cases = np.array(cases)
+        fig = Figure(figsize=(7, 3.8), layout='constrained')
+        ax = fig.subplots()
+        # fig, ax = plt.subplots()
+        ax.plot(weeks, cases, linewidth=2.5)  # Plot some data on the axes.
+        ax.set_xlabel('Недели')  # Add an x-label to the axes.
+        ax.set_ylabel('Заболеваемость на 10 тыс. нас.')  # Add a y-label to the axes.
+        ax.set_title(f"Динамика заболеваемости ОРВИ и гриппом по неделям за {self.year} г.")  # Add a title to the axes.
+        # Make a plot with major ticks that are multiples of 5 and minor ticks that
+        # are multiples of 5 if weeks number > 14, else with only major ticks that are multiples of 1.
+        if len(weeks) > 14:
+            maj_locator_freq = 5
+        else:
+            maj_locator_freq = 1
+        ax.xaxis.set_major_locator(MultipleLocator(maj_locator_freq))
+        if maj_locator_freq > 4:
+            # For the minor ticks, use no labels.
+            ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+        ax.grid(True)
+        image_buf = BytesIO()
+        fig.savefig(image_buf, format="jpeg")
+        return image_buf
+
+
+if __name__ == '__main__':
+    from PIL import Image
+
+    pars = InfluenzaStatParser()
+    im_buf = pars.get_plot()
+    with Image.open(im_buf) as image:
+        image.show()

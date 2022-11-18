@@ -1,6 +1,7 @@
 import psycopg2
 import os
 import csv
+import traceback
 from psycopg2.extras import execute_values
 from io import StringIO
 from dotenv import load_dotenv
@@ -63,12 +64,34 @@ class DB:
             return "error"
         return max_week_number
 
+    def get_plot_data(self, year, start_week, end_week):
+        """Returns weeks and cases numbers for given year and weeks interval."""
+        weeks, cases = [], []
+        try:
+            cursor = self.connection.cursor()
+            query = f"""SELECT week_number, cases_number
+                          FROM influenza_stat
+                         WHERE year={year} AND week_number BETWEEN {start_week} AND {end_week}
+                         ORDER BY week_number;"""
+            cursor.execute(query)
+            for week_number, cases_number in cursor.fetchall():
+                weeks.append(week_number)
+                cases.append(cases_number)
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
+        return weeks, cases
+
     def close(self):
         if self.connection:
             self.connection.close()
 
-    def __exit__(self):
+    def __exit__(self, exc_type, exc_value, tb):
         self.close()
+        if exc_type is not None:
+            traceback.print_exception(exc_type, exc_value, tb)
+            # return False # uncomment to pass exception through
+        return True
 
 
 # Method to inserting pandas DataFrame into db with df.to_sql()
