@@ -112,7 +112,7 @@ class InfluenzaStatParser:
         if conn_string:
             with DB(conn_string) as db:
                 weeks, cases = db.get_plot_data(self.year, start_week, end_week)
-        if not (weeks and cases):
+        if not (weeks and cases):  # DB has no requested data.
             return None
         weeks = np.array(weeks)
         cases = np.array(cases)
@@ -143,6 +143,6 @@ if __name__ == '__main__':
     from PIL import Image
 
     pars = InfluenzaStatParser()
-    im_buf = pars.get_plot()
+    im_buf = pars.get_plot(52, 60)
     with Image.open(im_buf) as image:
         image.show()
