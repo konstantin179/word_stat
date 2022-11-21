@@ -1,7 +1,6 @@
 import requests
 import re
 import os
-import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
@@ -111,14 +110,13 @@ class InfluenzaStatParser:
         conn_string = os.getenv("DB_CONN_STR")
         if conn_string:
             with DB(conn_string) as db:
-                weeks, cases = db.get_plot_data(self.year, start_week, end_week)
+                weeks, cases = db.get_influenza_stat_plot_data(self.year, start_week, end_week)
         if not (weeks and cases):  # DB has no requested data.
             return None
         weeks = np.array(weeks)
         cases = np.array(cases)
         fig = Figure(figsize=(7, 3.8), layout='constrained')
         ax = fig.subplots()
-        # fig, ax = plt.subplots()
         ax.plot(weeks, cases, linewidth=2.5)  # Plot some data on the axes.
         ax.set_xlabel('Недели')  # Add an x-label to the axes.
         ax.set_ylabel('Заболеваемость на 10 тыс. нас.')  # Add a y-label to the axes.

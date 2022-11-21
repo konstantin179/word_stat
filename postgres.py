@@ -24,11 +24,136 @@ class DB:
     def __enter__(self):
         return self
 
+    def create_phrases_table(self):
+        """Create table in db for requested phrases."""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("""CREATE TABLE IF NOT EXISTS phrases (
+                                                     id SERIAL PRIMARY KEY,
+                                                     phrase VARCHAR,
+                            );""")
+            self.connection.commit()
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
+
+    def insert_values_into_phrases_table(self, data):
+        """Inserts requested phrases into phrases table."""
+        try:
+            cursor = self.connection.cursor()
+            execute_values(cursor,
+                           "INSERT INTO phrases (phrase) VALUES %s",
+                           data)
+            self.connection.commit()
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
+
+    def get_phrases(self):
+        """Returns list of phrases from phrases table."""
+        phrases = []
+        try:
+            cursor = self.connection.cursor()
+            query = f"""SELECT phrase FROM phrases;"""
+            cursor.execute(query)
+            for phrase in cursor.fetchall():
+                phrases.append(phrase)
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
+        return phrases
+
+    def delete_duplicates_from_phrases_table(self):
+        """Delete duplicates from phrases table."""
+        try:
+            cursor = self.connection.cursor()
+            delete_query = f"""DELETE FROM phrases 
+                                WHERE ctid IN 
+                                    (SELECT ctid 
+                                       FROM (SELECT ctid,
+                                                    row_number() OVER (PARTITION BY phrase
+                                                    ORDER BY id DESC) AS row_num
+                                               FROM phrases
+                                            ) t
+                                      WHERE t.row_num > 1
+                                    );"""
+            cursor.execute(delete_query)
+            self.connection.commit()
+            cursor.close()
+        except (Exception, psycopg2.Error) as e:
+            print("PostgreSQL error:", e)
+
+    def create_yandex_word_stat_table(self):
+        """Create table in db for yandex word stat data."""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("""CREATE TABLE IF NOT EXISTS yandex_word_stat (
+                                             id SERIAL PRIMARY KEY,
+                                             year INT,
+                                             month INT,
+                                             phrase VARCHAR,
+                                             shows INT
+                    );""")
+            self.connection.commit()
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
+
+    def insert_values_into_yandex_word_stat_table(self, data):
+        """Inserts statistics data into yandex_word_stat table."""
+        try:
+            cursor = self.connection.cursor()
+            execute_values(cursor,
+                           "INSERT INTO yandex_word_stat (year, month, phrase, shows) VALUES %s",
+                           data)
+            self.connection.commit()
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
+
+    def delete_duplicates_from_yandex_word_stat_table(self):
+        """Delete duplicates from yandex_word_stat table."""
+        try:
+            cursor = self.connection.cursor()
+            delete_query = f"""DELETE FROM yandex_word_stat 
+                                WHERE ctid IN 
+                                    (SELECT ctid 
+                                       FROM (SELECT ctid,
+                                                    row_number() OVER (PARTITION BY year, month, phrase
+                                                    ORDER BY id DESC) AS row_num
+                                               FROM yandex_word_stat
+                                            ) t
+                                      WHERE t.row_num > 1
+                                    );"""
+            cursor.execute(delete_query)
+            self.connection.commit()
+            cursor.close()
+        except (Exception, psycopg2.Error) as e:
+            print("PostgreSQL error:", e)
+
+    def get_ya_word_stat_plot_data(self, phrase, year, start_month, end_month):
+        """Returns months and shows numbers for given phrase, year and months interval."""
+        months, shows = [], []
+        try:
+            cursor = self.connection.cursor()
+            query = f"""SELECT month, shows
+                          FROM yandex_word_stat
+                         WHERE phrase={phrase} AND year={year} AND month BETWEEN {start_month} AND {end_month}
+                         ORDER BY month;"""
+            cursor.execute(query)
+            for month_number, shows_number in cursor.fetchall():
+                months.append(month_number)
+                shows.append(shows_number)
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
+        return months, shows
+
     def create_influenza_stat_table(self):
         """Create table in db for influenza statistics data."""
         try:
             cursor = self.connection.cursor()
-            cursor.execute("""CREATE TABLE influenza_stat (
+            cursor.execute("""CREATE TABLE IF NOT EXISTS influenza_stat (
                                      id SERIAL PRIMARY KEY,
                                      year INT,
                                      week_number INT,
@@ -64,7 +189,7 @@ class DB:
             return "error"
         return max_week_number
 
-    def get_plot_data(self, year, start_week, end_week):
+    def get_influenza_stat_plot_data(self, year, start_week, end_week):
         """Returns weeks and cases numbers for given year and weeks interval."""
         weeks, cases = [], []
         try:
