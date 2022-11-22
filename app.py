@@ -11,19 +11,17 @@ cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 
 
 @app.route("/phrases/", methods=['GET', 'POST'])
-@cache.cached(timeout=180, query_string=True)
 def get_phrases():
     """Returns saved phrases from db.
-    Saved given phrases in db if POST method.
-    parameters:
-    - name: phrase
-        in: path
-        type: List[str]"""
+    Saved given phrases in db if POST method with
+    json: {"phrases": [str, ]}."""
     load_dotenv()
     conn_string = os.getenv("DB_CONN_STR")
     phrases = []
     if request.method == 'POST':
-        phrases = request.args.getlist('phrase', type=str)
+        data = request.get_json()
+        phrases = data['phrases']
+        phrases = [{"phrase": phrase} for phrase in phrases]
         if conn_string:
             with DB(conn_string) as db:
                 db.insert_values_into_phrases_table(phrases)
@@ -34,11 +32,11 @@ def get_phrases():
     return {"saved_phrases": phrases}
 
 
-@app.route("/influenza-stat/plot/")
+@app.route("/influenza-stat/week/plot/")
 @cache.cached(timeout=180, query_string=True)
-def get_influenza_stat_plot():
+def get_influenza_stat_plot_by_week():
     """Returns image with graph of influenza statistics by week,
-        starting from week number start_week to week number end_week..
+        starting from week number start_week to week number end_week.
     parameters:
     - name: year
         in: path
@@ -63,6 +61,37 @@ def get_influenza_stat_plot():
         mimetype='image/jpeg',
         as_attachment=True,
         download_name=f"influenza_stat_y{year}sw{start_week}ew{end_week}.jpeg")
+
+
+@app.route("/influenza-stat/month/plot/")
+#@cache.cached(timeout=180, query_string=True)
+def get_influenza_stat_plot_by_month():
+    """Returns image with graph of influenza statistics by month,
+        starting from start_month to end_month.
+    parameters:
+    - name: year
+        in: path
+        type: int
+    - name: start_month
+        in: path
+        type: int
+    - name: end_month
+        in: path
+        type: int"""
+    year = request.args.get('year', default=2022, type=int)
+    start_month = request.args.get('start_month', default=1, type=int)
+    end_month = request.args.get('end_month', default=12, type=int)
+    parser = InfluenzaStatParser(year)
+    parser.update_statistics_data()
+    image_buf = parser.get_plot_by_month(start_month, end_month)
+    if not image_buf:
+        abort(404)
+    image_buf.seek(0)
+    return send_file(
+        image_buf,
+        mimetype='image/jpeg',
+        as_attachment=True,
+        download_name=f"influenza_stat_y{year}m{start_month}-{end_month}.jpeg")
 
 
 @app.route("/yandex_word_stat/plot/")

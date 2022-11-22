@@ -1,3 +1,5 @@
+from typing import List
+
 import psycopg2
 import os
 import csv
@@ -30,20 +32,20 @@ class DB:
             cursor = self.connection.cursor()
             cursor.execute("""CREATE TABLE IF NOT EXISTS phrases (
                                                      id SERIAL PRIMARY KEY,
-                                                     phrase VARCHAR,
+                                                     phrase VARCHAR
                             );""")
             self.connection.commit()
             cursor.close()
         except (Exception, psycopg2.Error) as error:
             print("PostgreSQL error:", error)
 
-    def insert_values_into_phrases_table(self, data):
+    def insert_values_into_phrases_table(self, data: List[dict]):
         """Inserts requested phrases into phrases table."""
         try:
             cursor = self.connection.cursor()
             execute_values(cursor,
                            "INSERT INTO phrases (phrase) VALUES %s",
-                           data)
+                           data, template="(%(phrase)s)")
             self.connection.commit()
             cursor.close()
         except (Exception, psycopg2.Error) as error:
@@ -57,7 +59,7 @@ class DB:
             query = f"""SELECT phrase FROM phrases;"""
             cursor.execute(query)
             for phrase in cursor.fetchall():
-                phrases.append(phrase)
+                phrases.append(phrase[0])
             cursor.close()
         except (Exception, psycopg2.Error) as error:
             print("PostgreSQL error:", error)
@@ -99,7 +101,7 @@ class DB:
         except (Exception, psycopg2.Error) as error:
             print("PostgreSQL error:", error)
 
-    def insert_values_into_yandex_word_stat_table(self, data):
+    def insert_values_into_yandex_word_stat_table(self, data: List[tuple]):
         """Inserts statistics data into yandex_word_stat table."""
         try:
             cursor = self.connection.cursor()
@@ -164,7 +166,7 @@ class DB:
         except (Exception, psycopg2.Error) as error:
             print("PostgreSQL error:", error)
 
-    def insert_values_into_influenza_stat_table(self, data):
+    def insert_values_into_influenza_stat_table(self, data: List[tuple]):
         """Inserts statistics data into influenza_stat table."""
         try:
             cursor = self.connection.cursor()
@@ -256,6 +258,8 @@ if __name__ == "__main__":
     conn_string = os.getenv("DB_CONN_STR")
     if conn_string:
         with DB(conn_string) as db:
+            db.create_phrases_table()
             db.create_influenza_stat_table()
+            db.create_yandex_word_stat_table()
     else:
         print("DB connection string is not found.")

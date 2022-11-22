@@ -2,6 +2,7 @@ import requests
 import re
 import os
 import numpy as np
+import datetime
 from matplotlib.figure import Figure
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
 from io import BytesIO
@@ -136,11 +137,53 @@ class InfluenzaStatParser:
         fig.savefig(image_buf, format="jpeg")
         return image_buf
 
+    def get_plot_by_month(self, start_month: int = 1, end_month: int = 12):
+        """Returns bytes buffer with graph of influenza statistics by month,
+        starting from start_month to end_month."""
+        print(start_month, end_month)
+        start_week = datetime.date(int(self.year), start_month, 1).strftime("%W")
+        end_week = datetime.date(int(self.year), end_month, 28).strftime("%W")
+        print(start_week, end_week)
+        weeks, cases = [], []
+        load_dotenv()
+        conn_string = os.getenv("DB_CONN_STR")
+        if conn_string:
+            with DB(conn_string) as db:
+                weeks, cases = db.get_influenza_stat_plot_data(self.year, start_week, end_week)
+        if not (weeks and cases):  # DB has no requested data.
+            return None
+        months_cases = {}
+        for week_num, cases_num in zip(weeks, cases):
+            date_string = f"{self.year}-W{week_num}-1"
+            date_from_week = datetime.datetime.strptime(date_string, "%Y-W%W-%w")
+            month = date_from_week.month
+            # For weeks whose first days were in the last month.
+            if month < start_month:
+                month = start_month
+            if month not in months_cases:
+                months_cases[month] = cases_num
+            else:
+                months_cases[month] += cases_num
+        months = np.array(list(months_cases.keys()))
+        cases = np.array(list(months_cases.values()))
+        print("months", months, "\n", "cases", cases)
+        fig = Figure(figsize=(7, 3.8), layout='constrained')
+        ax = fig.subplots()
+        ax.plot(months, cases, linewidth=2.5)  # Plot some data on the axes.
+        ax.set_xlabel('Месяцы')  # Add an x-label to the axes.
+        ax.set_ylabel('Заболеваемость на 10 тыс. нас.')  # Add a y-label to the axes.
+        ax.set_title(f"Динамика заболеваемости ОРВИ и гриппом по месяцам за {self.year} г.")  # Add a title to the axes.
+        ax.xaxis.set_major_locator(MultipleLocator(1))
+        ax.grid(True)
+        image_buf = BytesIO()
+        fig.savefig(image_buf, format="jpeg")
+        return image_buf
+
 
 if __name__ == '__main__':
     from PIL import Image
 
     pars = InfluenzaStatParser()
-    im_buf = pars.get_plot(52, 60)
+    im_buf = pars.get_plot_by_month(2)
     with Image.open(im_buf) as image:
         image.show()
