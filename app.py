@@ -64,7 +64,7 @@ def get_influenza_stat_plot_by_week():
 
 
 @app.route("/influenza-stat/month/plot/")
-#@cache.cached(timeout=180, query_string=True)
+@cache.cached(timeout=180, query_string=True)
 def get_influenza_stat_plot_by_month():
     """Returns image with graph of influenza statistics by month,
         starting from start_month to end_month.
