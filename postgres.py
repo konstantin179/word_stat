@@ -1,12 +1,9 @@
-from typing import List
-
 import psycopg2
 import os
-import csv
 import traceback
 from psycopg2.extras import execute_values
-from io import StringIO
 from dotenv import load_dotenv
+from typing import List
 
 
 class DB:
@@ -58,8 +55,8 @@ class DB:
             cursor = self.connection.cursor()
             query = f"""SELECT phrase FROM phrases;"""
             cursor.execute(query)
-            for phrase in cursor.fetchall():
-                phrases.append(phrase[0])
+            for row in cursor.fetchall():
+                phrases.append(row[0])
             cursor.close()
         except (Exception, psycopg2.Error) as error:
             print("PostgreSQL error:", error)
@@ -69,8 +66,8 @@ class DB:
         """Delete duplicates from phrases table."""
         try:
             cursor = self.connection.cursor()
-            delete_query = f"""DELETE FROM phrases 
-                                WHERE ctid IN 
+            delete_query = """DELETE FROM phrases 
+                               WHERE ctid IN 
                                     (SELECT ctid 
                                        FROM (SELECT ctid,
                                                     row_number() OVER (PARTITION BY phrase
@@ -84,6 +81,97 @@ class DB:
             cursor.close()
         except (Exception, psycopg2.Error) as e:
             print("PostgreSQL error:", e)
+
+    def create_google_trends_stat_table(self):
+        """Create table in db for google trends stat data."""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("""CREATE TABLE IF NOT EXISTS google_trends_stat (
+                                             id SERIAL PRIMARY KEY,
+                                             year INT,
+                                             week_number INT,
+                                             phrase VARCHAR,
+                                             shows_percent INT
+                    );""")
+            self.connection.commit()
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
+
+    def insert_values_into_google_trends_stat_table(self, data):
+        """Inserts statistics data into google_trends_stat table."""
+        try:
+            cursor = self.connection.cursor()
+            execute_values(cursor,
+                           "INSERT INTO google_trends_stat (year, week_number, phrase, shows_percent) VALUES %s",
+                           data)
+            self.connection.commit()
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
+
+    def get_new_google_trends_phrases(self, year, week_number):
+        """Returns list of new phrases to get statistics from Google trends.
+        Arguments:
+            year - current year,
+            week - week number of previous week."""
+        new_phrases = []
+        try:
+            cursor = self.connection.cursor()
+            query = f"""SELECT phrase
+                          FROM phrases
+                         WHERE phrase NOT IN (SELECT phrase
+                                                FROM (SELECT phrase, MAX(week_number) max_w_n
+                                                        FROM google_trends_stat
+                                                       WHERE year = {year}
+                                                       GROUP BY phrase) t
+                                               WHERE t.max_w_n >= {week_number});"""
+            cursor.execute(query)
+            for row in cursor.fetchall():
+                new_phrases.append(row[0])
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
+        return new_phrases
+
+    def delete_duplicates_from_google_trends_stat_table(self):
+        """Delete duplicates from google_trends_stat table."""
+        try:
+            cursor = self.connection.cursor()
+            delete_query = """DELETE FROM google_trends_stat 
+                               WHERE ctid IN 
+                                    (SELECT ctid 
+                                       FROM (SELECT ctid,
+                                                    row_number() OVER (PARTITION BY year, week_number, phrase
+                                                    ORDER BY id DESC) AS row_num
+                                               FROM google_trends_stat
+                                            ) t
+                                      WHERE t.row_num > 1
+                                    );"""
+            cursor.execute(delete_query)
+            self.connection.commit()
+            cursor.close()
+        except (Exception, psycopg2.Error) as e:
+            print("PostgreSQL error:", e)
+
+    def get_google_trends_stat_plot_data(self, phrase, year, start_week, end_week):
+        """Returns weeks and shows percents for given phrase, year and weeks interval."""
+        weeks, shows_percents = [], []
+        try:
+            cursor = self.connection.cursor()
+            query = f"""SELECT week_number, shows_percent
+                                  FROM google_trends_stat
+                                 WHERE phrase='{phrase}' AND year={year} AND
+                                       week_number BETWEEN {start_week} AND {end_week}
+                                 ORDER BY week_number;"""
+            cursor.execute(query)
+            for week_number, shows_percent in cursor.fetchall():
+                weeks.append(week_number)
+                shows_percents.append(shows_percent)
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
+        return weeks, shows_percents
 
     def create_yandex_word_stat_table(self):
         """Create table in db for yandex word stat data."""
@@ -113,12 +201,37 @@ class DB:
         except (Exception, psycopg2.Error) as error:
             print("PostgreSQL error:", error)
 
+    def get_new_yandex_word_stat_phrases(self, year, month, limit=1000):
+        """Returns list of new phrases to get statistics from yandex word stat.
+                Arguments:
+                    year - current year,
+                    month - number of previous month."""
+        new_phrases = []
+        try:
+            cursor = self.connection.cursor()
+            query = f"""SELECT phrase
+                          FROM phrases
+                         WHERE phrase NOT IN (SELECT phrase
+                                                FROM (SELECT phrase, MAX(month) max_month
+                                                        FROM yandex_word_stat
+                                                       WHERE year = {year}
+                                                       GROUP BY phrase) t
+                                               WHERE t.max_month >= {month})
+                         LIMIT {limit};"""
+            cursor.execute(query)
+            for row in cursor.fetchall():
+                new_phrases.append(row[0])
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
+        return new_phrases
+
     def delete_duplicates_from_yandex_word_stat_table(self):
         """Delete duplicates from yandex_word_stat table."""
         try:
             cursor = self.connection.cursor()
-            delete_query = f"""DELETE FROM yandex_word_stat 
-                                WHERE ctid IN 
+            delete_query = """DELETE FROM yandex_word_stat 
+                               WHERE ctid IN 
                                     (SELECT ctid 
                                        FROM (SELECT ctid,
                                                     row_number() OVER (PARTITION BY year, month, phrase
@@ -140,7 +253,7 @@ class DB:
             cursor = self.connection.cursor()
             query = f"""SELECT month, shows
                           FROM yandex_word_stat
-                         WHERE phrase={phrase} AND year={year} AND month BETWEEN {start_month} AND {end_month}
+                         WHERE phrase='{phrase}' AND year={year} AND month BETWEEN {start_month} AND {end_month}
                          ORDER BY month;"""
             cursor.execute(query)
             for month_number, shows_number in cursor.fetchall():
@@ -209,6 +322,59 @@ class DB:
             print("PostgreSQL error:", error)
         return weeks, cases
 
+    def create_last_ya_word_stat_req_table(self):
+        """Create table in db for timestamp and phrases number of last request to yandex word stat API."""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("""CREATE TABLE IF NOT EXISTS last_ya_word_stat_req (
+                                     id SERIAL PRIMARY KEY,
+                                     request_date TIMESTAMP,
+                                     phrases_number INT
+            );""")
+            self.connection.commit()
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
+
+    def insert_values_in_last_ya_word_stat_req_table(self, req_date, phrases_number):
+        """Inserts last request info in db."""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("INSERT INTO last_ya_word_stat_req (request_date, phrases_number) VALUES (%s, %s)",
+                           (req_date, phrases_number))
+            self.connection.commit()
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
+
+    def get_last_req_info(self):
+        """Returns last request info from last_ya_word_stat_req table."""
+        last_req_date = None
+        last_req_phrases_number = None
+        try:
+            cursor = self.connection.cursor()
+            query = f"""SELECT request_date, phrases_number
+                          FROM last_ya_word_stat_req
+                         ORDER BY request_date DESC
+                         LIMIT 1;"""
+            cursor.execute(query)
+            last_req_date, last_req_phrases_number = cursor.fetchone()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
+        return last_req_date, last_req_phrases_number
+
+    def delete_old_rows_in_last_ya_word_stat_req_table(self):
+        """Delete rows with old requests data."""
+        try:
+            cursor = self.connection.cursor()
+            delete_query = """DELETE FROM last_ya_word_stat_req 
+                               WHERE request_date < (SELECT MAX(request_date) FROM last_ya_word_stat_req);"""
+            cursor.execute(delete_query)
+            self.connection.commit()
+            cursor.close()
+        except (Exception, psycopg2.Error) as e:
+            print("PostgreSQL error:", e)
+
     def close(self):
         if self.connection:
             self.connection.close()
@@ -221,38 +387,6 @@ class DB:
         return True
 
 
-# Method to inserting pandas DataFrame into db with df.to_sql()
-def psql_insert_copy(table, conn, keys, data_iter):
-    """
-    Execute SQL statement inserting data
-
-    Parameters
-    ----------
-    table : pandas.io.sql.SQLTable
-    conn : sqlalchemy.engine.Engine or sqlalchemy.engine.Connection
-    keys : list of str
-        Column names
-    data_iter : Iterable that iterates the values to be inserted
-    """
-    # gets a DBAPI connection that can provide a cursor
-    dbapi_conn = conn.connection
-    with dbapi_conn.cursor() as cur:
-        s_buf = StringIO()
-        writer = csv.writer(s_buf)
-        writer.writerows(data_iter)
-        s_buf.seek(0)
-
-        columns = ', '.join(['"{}"'.format(k) for k in keys])
-        if table.schema:
-            table_name = '{}.{}'.format(table.schema, table.name)
-        else:
-            table_name = table.name
-
-        sql = 'COPY {} ({}) FROM STDIN WITH CSV'.format(
-            table_name, columns)
-        cur.copy_expert(sql=sql, file=s_buf)
-
-
 if __name__ == "__main__":
     load_dotenv()
     conn_string = os.getenv("DB_CONN_STR")
@@ -261,5 +395,7 @@ if __name__ == "__main__":
             db.create_phrases_table()
             db.create_influenza_stat_table()
             db.create_yandex_word_stat_table()
+            db.create_google_trends_stat_table()
+            db.create_last_ya_word_stat_req_table()
     else:
         print("DB connection string is not found.")

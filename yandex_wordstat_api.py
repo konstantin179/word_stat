@@ -9,7 +9,7 @@ from urllib.error import URLError
 from typing import List, Tuple
 from postgres import DB
 from dotenv import load_dotenv
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 
 class WordStatApiClient:
@@ -20,13 +20,45 @@ class WordStatApiClient:
         self.url = 'https://api.direct.yandex.ru/v/json/'
 
     def update_phrase_statistics(self):
+        """Downloads new phrase search statistics."""
         load_dotenv()
         conn_string = os.getenv("DB_CONN_STR")
+        phrases_number = 0
+        limit = 1000
+        last_req_date = None
+        last_req_phrases_number = None
+        if conn_string:
+            with DB(conn_string) as db:
+                last_req_date, last_req_phrases_number = db.get_last_req_info()
+        # Checking the API limit of 1000 requests per day.
+        if last_req_date:
+            last_req_date = datetime.fromisoformat(last_req_date)
+            passed_time = datetime.now() - last_req_date
+            if passed_time < timedelta(days=1):
+                if last_req_phrases_number is not None:
+                    limit = 1000 - last_req_phrases_number
+                    if limit < 1:
+                        return None
+                    phrases_number += last_req_phrases_number
+                else:
+                    return None
+        today = date.today()
+        year = today.year
+        month = today.month - 1
+        if month < 1:
+            year = year - 1
+            month = 12
         phrases = []
         if conn_string:
             with DB(conn_string) as db:
-                phrases = db.get_phrases()
+                phrases = db.get_new_yandex_word_stat_phrases(year, month, limit)
         self.get_phrase_statistics(phrases)
+        req_date = datetime.now()
+        phrases_number += len(phrases)
+        if conn_string:
+            with DB(conn_string) as db:
+                db.insert_values_in_last_ya_word_stat_req_table(req_date, phrases_number)
+                db.delete_old_rows_in_last_ya_word_stat_req_table()
 
     def get_phrase_statistics(self, phrases: List[str], geo_id: List[int] = None):
         """Downloads phrase search statistics from Yandex WordStat API and writes it in db.

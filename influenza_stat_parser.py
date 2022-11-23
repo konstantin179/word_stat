@@ -103,7 +103,7 @@ class InfluenzaStatParser:
         week_number = int(week_number)
         return week_number, cases_number
 
-    def get_plot(self, start_week: int = 1, end_week: int = 52):
+    def get_plot_by_week(self, start_week: int = 1, end_week: int = 52):
         """Returns bytes buffer with graph of influenza statistics by week,
         starting from week number start_week to week number end_week."""
         weeks, cases = [], []
@@ -140,10 +140,8 @@ class InfluenzaStatParser:
     def get_plot_by_month(self, start_month: int = 1, end_month: int = 12):
         """Returns bytes buffer with graph of influenza statistics by month,
         starting from start_month to end_month."""
-        print(start_month, end_month)
         start_week = datetime.date(int(self.year), start_month, 1).strftime("%W")
         end_week = datetime.date(int(self.year), end_month, 28).strftime("%W")
-        print(start_week, end_week)
         weeks, cases = [], []
         load_dotenv()
         conn_string = os.getenv("DB_CONN_STR")
@@ -157,16 +155,16 @@ class InfluenzaStatParser:
             date_string = f"{self.year}-W{week_num}-1"
             date_from_week = datetime.datetime.strptime(date_string, "%Y-W%W-%w")
             month = date_from_week.month
-            # For weeks whose first days were in the last month.
-            if month < start_month:
-                month = start_month
             if month not in months_cases:
                 months_cases[month] = cases_num
             else:
                 months_cases[month] += cases_num
+        # Removing the month before start_month, which may have been added
+        # since the first week may start in the previous month.
+        if (start_month - 1) in months_cases:
+            del months_cases[start_month - 1]
         months = np.array(list(months_cases.keys()))
         cases = np.array(list(months_cases.values()))
-        print("months", months, "\n", "cases", cases)
         fig = Figure(figsize=(7, 3.8), layout='constrained')
         ax = fig.subplots()
         ax.plot(months, cases, linewidth=2.5)  # Plot some data on the axes.
@@ -178,12 +176,3 @@ class InfluenzaStatParser:
         image_buf = BytesIO()
         fig.savefig(image_buf, format="jpeg")
         return image_buf
-
-
-if __name__ == '__main__':
-    from PIL import Image
-
-    pars = InfluenzaStatParser()
-    im_buf = pars.get_plot_by_month(2)
-    with Image.open(im_buf) as image:
-        image.show()
