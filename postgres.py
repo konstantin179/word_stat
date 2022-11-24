@@ -125,7 +125,12 @@ class DB:
                                                         FROM google_trends_stat
                                                        WHERE year = {year}
                                                        GROUP BY phrase) t
-                                               WHERE t.max_w_n >= {week_number})
+                                               WHERE t.max_w_n >= {week_number}
+                                               UNION
+                                              SELECT phrase
+                                                FROM google_trends_stat
+                                               WHERE shows_percent is NULL
+                                               GROUP BY phrase)
                          LIMIT {limit};"""
             cursor.execute(query)
             for row in cursor.fetchall():
@@ -134,6 +139,17 @@ class DB:
         except (Exception, psycopg2.Error) as error:
             print("PostgreSQL error:", error)
         return new_phrases
+
+    def insert_google_trends_phrase_with_no_data(self, phrase):
+        """Inserts phrase and NULL value to google_trends_stat table, for which there is no data."""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("""INSERT INTO google_trends_stat (phrase, shows_percent)
+                                     VALUES (%s, NULL)""", (phrase,))
+            self.connection.commit()
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            print("PostgreSQL error:", error)
 
     def delete_duplicates_from_google_trends_stat_table(self):
         """Delete duplicates from google_trends_stat table."""

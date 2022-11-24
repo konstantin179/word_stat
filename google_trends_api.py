@@ -89,6 +89,11 @@ class GoogleTrendsApi:
                     return phrase_stat_df
                 else:
                     print(f"Google trends has no data for phrase '{phrase}'")
+                    load_dotenv()
+                    conn_string = os.getenv("DB_CONN_STR")
+                    if conn_string:
+                        with DB(conn_string) as db:
+                            db.insert_google_trends_phrase_with_no_data(phrase)
                     return phrase_stat_df
             except ResponseError as e:
                 print("Error: " + str(e))

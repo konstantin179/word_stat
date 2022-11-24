@@ -36,7 +36,7 @@ if __name__ == '__main__':
     # get_phrases_from_csv("keywords.csv")
 
     gt = GoogleTrendsApi()
-    gt.update_phrase_statistics_multithread(limit=100)
+    gt.update_phrase_statistics_multithread(limit=1000)
 
     # load_dotenv()
     # token = os.getenv("Y_WS_TOKEN")
