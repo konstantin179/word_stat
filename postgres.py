@@ -110,7 +110,7 @@ class DB:
         except (Exception, psycopg2.Error) as error:
             print("PostgreSQL error:", error)
 
-    def get_new_google_trends_phrases(self, year, week_number):
+    def get_new_google_trends_phrases(self, year, week_number, limit):
         """Returns list of new phrases to get statistics from Google trends.
         Arguments:
             year - current year,
@@ -125,7 +125,8 @@ class DB:
                                                         FROM google_trends_stat
                                                        WHERE year = {year}
                                                        GROUP BY phrase) t
-                                               WHERE t.max_w_n >= {week_number});"""
+                                               WHERE t.max_w_n >= {week_number})
+                         LIMIT {limit};"""
             cursor.execute(query)
             for row in cursor.fetchall():
                 new_phrases.append(row[0])

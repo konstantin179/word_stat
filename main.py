@@ -33,10 +33,12 @@ def get_phrases_from_csv(filepath):
 
 
 if __name__ == '__main__':
-    get_phrases_from_csv("keywords.csv")
+    # get_phrases_from_csv("keywords.csv")
 
     gt = GoogleTrendsApi()
-    gt.update_phrase_statistics_multithread()
+    gt.update_phrase_statistics_multithread(limit=100)
 
-    word_stat_client = WordStatApiClient()
-    word_stat_client.update_phrase_statistics()
+    # load_dotenv()
+    # token = os.getenv("Y_WS_TOKEN")
+    # word_stat_client = WordStatApiClient(token)
+    # word_stat_client.update_phrase_statistics()

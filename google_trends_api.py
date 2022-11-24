@@ -25,7 +25,7 @@ class GoogleTrendsApi:
         else:
             self.date_end = date.today().replace(month=12, day=31)
 
-    def update_phrase_statistics(self):
+    def update_phrase_statistics(self, limit=1000):
         """Downloads new phrase search statistics."""
         load_dotenv()
         conn_string = os.getenv("DB_CONN_STR")
@@ -38,14 +38,14 @@ class GoogleTrendsApi:
             week = 52
         if conn_string:
             with DB(conn_string) as db:
-                phrases = db.get_new_google_trends_phrases(year, week)
+                phrases = db.get_new_google_trends_phrases(year, week, limit)
         for phrase in phrases:
             self.get_phrase_statistics(phrase)
         if conn_string:
             with DB(conn_string) as db:
                 db.delete_duplicates_from_google_trends_stat_table()
 
-    def update_phrase_statistics_multithread(self):
+    def update_phrase_statistics_multithread(self, limit=1000):
         """Multithreading version of update_phrase_statistics."""
         load_dotenv()
         conn_string = os.getenv("DB_CONN_STR")
@@ -58,7 +58,7 @@ class GoogleTrendsApi:
             week = 52
         if conn_string:
             with DB(conn_string) as db:
-                phrases = db.get_new_google_trends_phrases(year, week)
+                phrases = db.get_new_google_trends_phrases(year, week, limit)
         with ThreadPoolExecutor() as executor:
             executor.map(self.get_phrase_statistics, phrases)
         if conn_string:
@@ -67,7 +67,6 @@ class GoogleTrendsApi:
 
     def get_phrase_statistics(self, phrase: str):
         """Downloads phrases search statistics from Google trends and writes it in db."""
-        print(phrase)
         df = self._get_phrase_statistics_df(phrase)
         df = df.reset_index()  # Set all column names in one line.
         if not df.empty:
@@ -77,17 +76,19 @@ class GoogleTrendsApi:
         """Returns dataframe with phrase statistics from Google trends."""
         time_frame = self.date_start.strftime("%Y-%m-%d") + ' ' + self.date_end.strftime("%Y-%m-%d")
         phrases = [phrase]
-        phrase_stat_df = None
+        phrase_stat_df = pd.DataFrame()
         timer = 0
         timestep = 20
         timeout = 100
         while timer < timeout:
-            print(phrases, timer)
             try:
                 pytrend = TrendReq(hl='RU', tz=3)
                 pytrend.build_payload(phrases, timeframe=time_frame, geo='RU')
                 phrase_stat_df = pytrend.interest_over_time()
                 if not phrase_stat_df.empty:
+                    return phrase_stat_df
+                else:
+                    print(f"Google trends has no data for phrase '{phrase}'")
                     return phrase_stat_df
             except ResponseError as e:
                 print("Error: " + str(e))
